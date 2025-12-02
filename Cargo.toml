@@ -1,0 +1,14 @@
+[package]
+name = "todolist"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chrono = "0.4.42"
+rusqlite = { version = "0.37.0", features = ["bundled"] }
+dotenv = "0.15"
+
+
+[[bin]]
+name = "migrations"
+path = "./src/bin/migration.rs"

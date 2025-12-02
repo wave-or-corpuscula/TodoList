@@ -1,0 +1,8 @@
+# Database files
+*.sqlite3
+*.sqlite3-*
+*.db
+data/
+
+/target
+Cargo.lock
