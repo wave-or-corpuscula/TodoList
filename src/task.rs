@@ -2,12 +2,12 @@ use std::fmt::{Display, Formatter, Result};
 
 
 pub struct Task {
-    id: u32,
-    parent_id: Option<u32>,
-    name: String,
-    completed: bool,
-    description: Option<String>,
-    creation_date: chrono::DateTime<chrono::Utc>,
+    pub id: u32,
+    pub parent_id: Option<u32>,
+    pub name: String,
+    pub completed: bool,
+    pub description: Option<String>,
+    pub creation_date: chrono::DateTime<chrono::Utc>,
 }
 
 impl Display for Task {
@@ -16,3 +16,15 @@ impl Display for Task {
     }
 }
 
+pub struct CreateTask {
+    pub name: String,
+    pub parent_id: Option<u32>,
+    pub description: Option<String>,
+}
+
+pub struct UpdateTask {
+    pub id: u32,
+    pub name: Option<String>,
+    pub parent_id: Option<u32>,
+    pub description: Option<String>,
+}

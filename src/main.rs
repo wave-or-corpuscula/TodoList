@@ -1,12 +1,14 @@
 use std::{error::Error, fs};
 
-mod task;
 use dotenv;
+
+use todolist::config::Config;
+use todolist::database::DB;
 
 fn main() -> Result<(), Box<dyn Error>> {
     dotenv::dotenv().ok();
-    fs::File::open("hello.txt")?;
-    println!("Hello, world!");
+    let config = Config::build()?;
+    let db = DB::new(&config);
 
     Ok(())
 }
