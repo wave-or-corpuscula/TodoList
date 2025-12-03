@@ -1,10 +1,9 @@
-use std::path::Path;
+use std::collections::HashMap;
 use std::error::Error;
 
-use chrono::{DateTime, NaiveDateTime};
-use rusqlite::{Connection, Result};
+use rusqlite::{Connection, Params, Result};
 
-use crate::task::{CreateTask, UpdateTask, Task, SelectTask};
+use crate::task::*;
 use crate::config::Config;
 
 pub struct DB {
@@ -34,27 +33,49 @@ impl DB {
         Ok (Self {connection})
     }
 
-    pub fn select_tasks(&self) -> Result<Vec<Task>, Box<dyn Error>> {
-        let mut stmt = self.connection.prepare("SELECT * FROM Task")?;
-        let task_iter = stmt.query_map([], |row| {
-            Ok(SelectTask {
-                id: row.get(0)?,
-                parent_id: row.get(1)?,
-                name: row.get(2)?,
-                completed: row.get(3)?,
-                description: row.get(4)?,
-                creation_date: row.get(5)?
+    pub fn select_tasks_hierarchy(&self, completed: Option<bool>) -> Result<Vec<TaskWithKids>, Box<dyn Error>> {
+        let all_tasks = self.select_tasks()?;
 
-            })
+        let mut by_parent: HashMap<Option<u32>, Vec<Task>> = HashMap::new();
+
+        for task in all_tasks {
+            by_parent.entry(task.parent_id).or_default().push(task);
+        }
+
+        let root_tasks = by_parent.remove(&None).unwrap_or_default();
+
+        let mut task_with_kids: Vec<TaskWithKids> = Vec::new();
+        for task in root_tasks {
+            task_with_kids.push(TaskWithKids::get_recursive(task, &by_parent));
+        }
+
+        Ok(task_with_kids)
+    }
+
+    pub fn select_completed_tasks(&self, completed: bool) -> Result<Vec<Task>, Box<dyn Error>> {
+        self.query_to_tasks(
+            "SELECT * FROM Task WHERE completed = ?1", 
+            [if completed { 1 } else { 0 }] )
+    }
+
+
+    pub fn select_tasks(&self) -> Result<Vec<Task>, Box<dyn Error>> {
+        self.query_to_tasks("SELECT * FROM Task", [])
+    }
+
+    fn query_to_tasks<P: Params> (&self, query: &str, params: P) -> Result<Vec<Task>, Box<dyn Error>>  {
+        let mut stmt = self.connection.prepare(query)?;
+        let task_iter = stmt.query_map(params, |row| {
+            Ok(SelectTask::from_row(row)?)
         })?;
 
-        
         let mut result = Vec::new();
         for task in task_iter {
             result.push(Task::from_select(task?)?);
         }
 
         Ok(result)
+        
     }
 
     pub fn create_task(&self, task: &CreateTask) -> Result<(), Box<dyn Error>>{
@@ -111,10 +132,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn selecting_hierarchy() -> Result<(), Box<dyn Error>> {
+        dotenv::dotenv().ok();
+        let config = Config::build()?;
+        let db = DB::new(&config)?;
+
+        let _tasks = db.select_tasks_hierarchy(None)?;
+
+        Ok(())
+    }
+
+    #[test]
     fn db_creation() -> Result<(), Box<dyn Error>>{
         dotenv::dotenv().ok();
         let config = Config::build()?;
-        let db = DB::new(&config);
+        let _db = DB::new(&config);
         Ok(())
     }
 
@@ -172,7 +204,7 @@ mod tests {
         let config = Config::build()?;
         let db = DB::new(&config)?;
 
-        db.delete_task(2)?;
+        db.delete_task(14)?;
 
         Ok(())
     }

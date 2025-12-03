@@ -46,7 +46,7 @@ fn seed_database(conn: &mut Connection) -> Result<()> {
     // Получаем ID только что вставленных корневых задач
     let rust_id: u32 = tx.last_insert_rowid() as u32 - 2; // "Изучить Rust"
     let todo_id: u32 = tx.last_insert_rowid() as u32 - 1; // "Создать проект TodoList" 
-    let doc_id: u32 = tx.last_insert_rowid() as u32;       // "Написать документацию"
+    let _doc_id: u32 = tx.last_insert_rowid() as u32;       // "Написать документацию"
 
     // Уровень 2: Подзадачи для "Изучить Rust" (3 задачи)
     tx.execute(

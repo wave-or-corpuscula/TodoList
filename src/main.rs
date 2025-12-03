@@ -1,4 +1,4 @@
-use std::{error::Error, fs};
+use std::{error::Error};
 
 use dotenv;
 
@@ -8,7 +8,7 @@ use todolist::database::DB;
 fn main() -> Result<(), Box<dyn Error>> {
     dotenv::dotenv().ok();
     let config = Config::build()?;
-    let db = DB::new(&config);
+    let _db = DB::new(&config);
 
     Ok(())
 }
