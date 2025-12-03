@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::error::Error;
 
-use rusqlite::{Connection, Params, Result};
+use rusqlite::{Connection, Params};
 
 use crate::task::*;
 use crate::config::Config;
@@ -34,7 +34,7 @@ impl DB {
     }
 
     pub fn select_tasks_hierarchy(&self, completed: Option<bool>) -> Result<Vec<TaskWithKids>, Box<dyn Error>> {
-        let all_tasks = self.select_tasks()?;
+        let all_tasks = self.select_tasks(completed)?;
 
         let mut by_parent: HashMap<Option<u32>, Vec<Task>> = HashMap::new();
 
@@ -59,8 +59,13 @@ impl DB {
     }
 
 
-    pub fn select_tasks(&self) -> Result<Vec<Task>, Box<dyn Error>> {
-        self.query_to_tasks("SELECT * FROM Task", [])
+    pub fn select_tasks(&self, completed: Option<bool>) -> Result<Vec<Task>, Box<dyn Error>> {
+        match completed {
+            Some(compl) => self.query_to_tasks(
+                "SELECT * FROM Task WHERE completed = ?1", 
+                [if compl { 1 } else { 0 }]),
+            None => self.query_to_tasks("SELECT * FROM Task", [])
+        }
     }
 
     fn query_to_tasks<P: Params> (&self, query: &str, params: P) -> Result<Vec<Task>, Box<dyn Error>>  {
@@ -172,7 +177,7 @@ mod tests {
         let config = Config::build()?;
         let db = DB::new(&config)?;
 
-        let tasks = db.select_tasks()?;
+        let tasks = db.select_tasks(None)?;
         for task in tasks {
             println!("{}", &task);
         }
