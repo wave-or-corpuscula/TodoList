@@ -1,9 +1,10 @@
 use std::path::Path;
 use std::error::Error;
 
+use chrono::{DateTime, NaiveDateTime};
 use rusqlite::{Connection, Result};
 
-use crate::task::{CreateTask, UpdateTask, Task};
+use crate::task::{CreateTask, UpdateTask, Task, SelectTask};
 use crate::config::Config;
 
 pub struct DB {
@@ -33,10 +34,10 @@ impl DB {
         Ok (Self {connection})
     }
 
-    pub fn select_tasks(&self) -> Result<(), Box<dyn Error>> {
+    pub fn select_tasks(&self) -> Result<Vec<Task>, Box<dyn Error>> {
         let mut stmt = self.connection.prepare("SELECT * FROM Task")?;
         let task_iter = stmt.query_map([], |row| {
-            Ok(Task {
+            Ok(SelectTask {
                 id: row.get(0)?,
                 parent_id: row.get(1)?,
                 name: row.get(2)?,
@@ -47,9 +48,13 @@ impl DB {
             })
         })?;
 
+        
+        let mut result = Vec::new();
+        for task in task_iter {
+            result.push(Task::from_select(task?)?);
+        }
 
-
-        Ok(())
+        Ok(result)
     }
 
     pub fn create_task(&self, task: &CreateTask) -> Result<(), Box<dyn Error>>{
@@ -130,13 +135,27 @@ mod tests {
     }
 
     #[test]
+    fn task_selection() -> Result<(), Box<dyn Error>> {
+        dotenv::dotenv().ok();
+        let config = Config::build()?;
+        let db = DB::new(&config)?;
+
+        let tasks = db.select_tasks()?;
+        for task in tasks {
+            println!("{}", &task);
+        }
+
+        Ok(())
+    }
+
+    #[test]
     fn task_updating() -> Result<(), Box<dyn Error>> {
         dotenv::dotenv().ok();
         let config = Config::build()?;
         let db = DB::new(&config)?;
 
         let update_task = UpdateTask {
-            id: 1,
+            id: 9,
             name: None,
             parent_id: None,
             description: Some(String::from("New description")),
