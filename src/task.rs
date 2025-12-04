@@ -87,6 +87,7 @@ pub struct UpdateTask {
     pub id: u32,
     pub name: Option<String>,
     pub parent_id: Option<u32>,
+    pub completed: Option<u32>,
     pub description: Option<String>,
 }
 

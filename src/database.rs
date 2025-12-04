@@ -68,6 +68,10 @@ impl DB {
         }
     }
 
+    pub fn select_task_subtasks(&self, parent_id: u32) -> Result<Vec<Task>, Box<dyn Error>> {
+        self.query_to_tasks("SELECT * FROM Task WHERE parent_id = ?1", [parent_id])
+    }
+
     fn query_to_tasks<P: Params> (&self, query: &str, params: P) -> Result<Vec<Task>, Box<dyn Error>>  {
         let mut stmt = self.connection.prepare(query)?;
         let task_iter = stmt.query_map(params, |row| {
@@ -110,6 +114,10 @@ impl DB {
             query.push_str("parent_id = ?, ");
             params.push(parent_id as &dyn rusqlite::ToSql);
         }
+        if let Some(ref completed) = task.completed {
+            query.push_str("completed = ?, ");
+            params.push(completed as &dyn rusqlite::ToSql);
+        }
         query.pop(); query.pop();
 
         query.push_str("WHERE id = ?");
@@ -135,6 +143,20 @@ impl DB {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn task_subtasks() -> Result<(), Box<dyn Error>> {
+        dotenv::dotenv().ok();
+        let config = Config::build()?;
+        let db = DB::new(&config)?;
+
+        let children = db.select_task_subtasks(25)?;
+        for t in children {
+            println!("{}", t);
+        }
+
+        Ok(())
+    }
 
     #[test]
     fn selecting_hierarchy() -> Result<(), Box<dyn Error>> {
@@ -196,6 +218,7 @@ mod tests {
             name: None,
             parent_id: None,
             description: Some(String::from("New description")),
+            completed: Some(1)
         };
 
         db.update_task(&update_task)?;
