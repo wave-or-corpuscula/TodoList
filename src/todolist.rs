@@ -220,8 +220,13 @@ impl TodoList {
         parent_id: Option<u32>,
         completed: Option<u32>,
         description: Option<String>,
-    ) -> Result<(), Box<dyn Error>> {
-        self.db.update_task(&UpdateTask { id, name, parent_id, description, completed })
+    ) -> Result<bool, Box<dyn Error>> {
+        let update = UpdateTask { id, name, parent_id, description, completed };
+        if !update.updated() {
+            return Ok(false)
+        }
+        self.db.update_task(&update)?;
+        Ok(true)
     }
 
     pub fn delete_task(&mut self, id: u32) -> Result<(), Box<dyn Error>> {

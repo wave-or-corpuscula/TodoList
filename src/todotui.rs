@@ -1,9 +1,9 @@
-use std::{error::Error, io::{BufRead, Write, stdin, stdout}};
+use std::{error::Error, io::{BufRead, Write, stdin, stdout}, result};
 
-use colored::Colorize;
 use crossterm::{
     cursor::{Hide, MoveTo, Show, EnableBlinking}, event::{Event, KeyCode, read}, execute, queue, style::Print, terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode}
 };
+use colored::Colorize;
 
 use crate::task::*;
 use crate::todolist::TodoList;
@@ -96,14 +96,14 @@ impl TodoTUI {
                     }
                     KeyCode::Enter => {
                         if let Some((task, _depth)) = self.todolist.get_selected_task() {
-                            self.show_task_details(&task)?;
+                            self.show_task_details_menu()?;
                         }
                     }
                     KeyCode::Tab => {
-                        self.toggle_completed();
+                        self.toggle_completed()?;
                     }
                     KeyCode::Char('a') => {
-                        self.add_task()?;
+                        self.add_task(None)?;
                     }
                     KeyCode::Char('d') => {
                         self.delete_selected_task()?;
@@ -121,20 +121,82 @@ impl TodoTUI {
 
     // ===== Show Details methods ===== // 
 
-    fn show_task_details(&self, task: &Task) -> Result<(), Box<dyn std::error::Error>> {
+    fn show_task_details_menu(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        disable_raw_mode()?;
         execute!(stdout(), 
             Clear(ClearType::All),
             MoveTo(0, 0),
+            EnableBlinking,
             Show
         )?;
-        disable_raw_mode()?;
-        queue!(stdout(),
-            Print("📋 Детали задачи\r\n"),
-            Print(format!("{}\n", "─".repeat(30))),
-            Print(format!("📝 Название: {}\r\n", task.name)),
-            Print(format!("✅ Статус: {}\r\n", if task.completed { "Выполнена" } else { "В работе" })),
-            Print(format!("📅 Создана: {}\r\n", task.creation_date.format("%Y-%m-%d %H:%M"))),
+
+        loop {
+            
+            let (task, _) = self.todolist.get_selected_task().unwrap();
+            self.show_task_details(&task)?;
+            
+            println!("\n\n1. Добавить подзадачу");
+            println!("2. Изменить данные");
+            println!("3. Удалить задачу");
+            println!("4. Назад");
+            print!("Ваш выбор: ");
+            stdout().flush()?;
+            
+            let input: u32 = console_read()?.parse().unwrap_or(0);
+            match input {
+                1 => {
+                    self.add_subtask(task.id)?;
+                },
+                2 => {
+                    self.change_task_data(&task)?;
+                    execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
+                    println!("Данные обновлены!\n");
+                }
+                _ => break
+            }
+        }
+        enable_raw_mode()?;
+        Ok(())
+    }
+
+    fn add_subtask(&mut self, task_id: u32) -> Result<(), Box<dyn Error>> {
+        execute!(stdout(), Clear(ClearType::All),MoveTo(0, 0),EnableBlinking,Show,)?;
+        println!("\n➕ Добавление подзадачи...");
+        let result = self._add_task(Some(task_id))?;
+        execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
+        if result {
+            println!("Подзадача добавлена!\n");
+        }
+
+        Ok(())
+    }
+
+    fn change_task_data(&mut self, task: &Task) -> Result<(), Box<dyn Error>> {
+        execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
+        println!("Введите новые данные для задачи:");
+        let (name, desc) = self.enter_task_data()?;
+        let updated = self.todolist.update_task(
+            task.id, 
+            name, 
+            None,
+            None, 
+            desc
         )?;
+
+        if updated {
+            self.todolist.refresh_data()?;
+        }
+
+        Ok(())
+
+    }
+
+    fn show_task_details(&self, task: &Task) -> Result<(), Box<dyn Error>> {
+        println!("📋 Детали задачи");
+        println!("{}", "─".repeat(30));
+        println!("📝 Название: {}", task.name);
+        println!("✅ Статус: {}", if task.completed { "Выполнена" } else { "В работе" });
+        println!("📅 Создана: {}", task.creation_date.format("%Y-%m-%d %H:%M"));
         
         if let Some(desc) = &task.description {
             println!("📄 Описание: {}", desc);
@@ -143,28 +205,13 @@ impl TodoTUI {
         // Показываем дочерние задачи
         let children = self.todolist.get_selected_children()?;
         if !children.is_empty() {
-            queue!(stdout(),Print("\n🔗 Подзадачи:\r\n"))?;
+            println!("\n🔗 Подзадачи:\r\n");
             for (i, child) in children.iter().enumerate() {
-                queue!(stdout(),
-                Print(format!("  {}. {} {}", i + 1, 
-                    if child.completed { "✓" } else { "○" }, 
-                    child.name)))?;
+                println!("  {}. {} {}", i + 1, 
+                                        if child.completed { "✓" } else { "○" }, 
+                                        child.name);
             }
         }
-        let mut input = String::new();
-
-        println!("\n\n1. Добавить подзадачу");
-        println!("2. Изменить название");
-        println!("3. Изменить описание");
-        println!("4. Удалить задачу");
-        println!("5. Назад");
-        println!("Ваш выбор: ");
-
-        std::io::stdin()
-            .read_line(&mut input)
-            .expect("failed to read line");
-        println!("Your choice: {}", input);
-        
         Ok(())
     }
 
@@ -172,35 +219,45 @@ impl TodoTUI {
 
     // ===== Adding task methods ===== // 
 
-    fn add_task(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn enter_task_data(&self) -> Result<(Option<String>, Option<String>), Box<dyn Error>> {
+        print!("Введите название задачи [Enter для отмены]: ");
+        stdout().flush()?;
+
+        let name = console_read()?;
+        if name.is_empty() {
+            return Ok((None, None))
+        }
+
+        println!("Введите описание задачи [Enter чтобы пропустить]: ");
+        let desc = console_read()?;
+        Ok((Some(name), if desc.is_empty() { None } else { Some(desc) }))
+    }
+
+    fn _add_task(&mut self, parent_id: Option<u32>) -> Result<bool, Box<dyn std::error::Error>> {
+        let (name, desc) = self.enter_task_data()?;
+        if name.is_none() {
+            return Ok(false)
+        }
+        self.todolist.create_task(
+            name.unwrap(), 
+            parent_id, 
+            desc
+        )?;
+
+        self.todolist.refresh_data()?;
+        Ok(true)
+    }
+
+    fn add_task(&mut self, parent_id: Option<u32>) -> Result<(), Box<dyn Error>> {
+        disable_raw_mode()?;
         execute!(stdout(), 
             Clear(ClearType::All),
             MoveTo(0, 0),
             EnableBlinking,
             Show,
         )?;
-        disable_raw_mode()?;
-        // Здесь будет логика добавления задачи
         println!("\n➕ Добавление задачи...");
-        print!("Введите название задачи [Enter для отмены]: ");
-        stdout().flush()?;
-
-        let name = console_read()?;
-        if name.is_empty() {
-            enable_raw_mode()?;
-            return Ok(())
-        }
-
-        println!("Введите описание задачи [Enter чтобы пропустить]: ");
-        let desc = console_read()?;
-
-        self.todolist.create_task(
-            name, 
-            None, 
-            if desc.is_empty() { None } else { Some(desc) }
-        )?;
-
-        self.todolist.refresh_data()?;
+        self._add_task(parent_id)?;
         enable_raw_mode()?;
         Ok(())
     }
@@ -253,4 +310,21 @@ impl TodoTUI {
 
 fn console_read() -> Result<String, Box<dyn Error>> {
     Ok(stdin().lock().lines().next().unwrap()?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn change_task_data() -> Result<(), Box<dyn Error>> {
+        let mut tui = TodoTUI::new()?;
+        tui.todolist.select_previous();
+        tui.todolist.select_previous();
+        
+        let (task, _) = tui.todolist.get_selected_task().unwrap();
+        tui.change_task_data(&task)?;
+
+        Ok(())
+    }
 }

@@ -91,6 +91,12 @@ pub struct UpdateTask {
     pub description: Option<String>,
 }
 
+impl UpdateTask {
+    pub fn updated(&self) -> bool {
+        self.name.is_some() || self.parent_id.is_some() || self.completed.is_some() || self.description.is_some() 
+    }
+}
+
 pub struct SelectTask {
     pub id: u32,
     pub parent_id: Option<u32>,
