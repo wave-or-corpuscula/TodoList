@@ -1,4 +1,4 @@
-use std::{error::Error, io::{BufRead, Write, stdin, stdout}, result};
+use std::{error::Error, io::{BufRead, Write, stdin, stdout}};
 
 use crossterm::{
     cursor::{Hide, MoveTo, Show, EnableBlinking}, event::{Event, KeyCode, read}, execute, queue, style::Print, terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode}
@@ -8,16 +8,10 @@ use colored::Colorize;
 use crate::task::*;
 use crate::todolist::TodoList;
 
-pub enum AppState {
-    TaskMenu,
-    TaskDetails,
-    AddTask,
-}
 
 pub struct TodoTUI {
     todolist: TodoList,
     running: bool,
-    state: AppState,
 }
 
 impl TodoTUI {
@@ -26,7 +20,6 @@ impl TodoTUI {
         Ok(Self {
             todolist: todolist,
             running: true,
-            state: AppState::TaskMenu,
         })
     }
 
@@ -52,13 +45,8 @@ impl TodoTUI {
             MoveTo(0, 0),
             Hide
         )?;
-        
-        // Заголовок
-        queue!(stdout(), 
-            Print("\r\n"),
-            Print("🎯 TodoList - Управление задачами\r\n"),
-            Print("═".repeat(50)),
-            Print("\r\n")
+        queue!(stdout(),
+            Print("Ваши задачи:\r\n\r\n".cyan()),
         )?;
         
         // Список задач с выделением
@@ -69,7 +57,9 @@ impl TodoTUI {
             Print("Управление:\r\n"),
             Print("↑↓    Навигация\r\n"),
             Print("Enter Детали задачи\r\n"), 
-            Print("q     Выход\r\n")
+            Print("a     Добавить задачу\r\n".green()),
+            Print("d     Удалить задачу\r\n".red()),
+            Print("q     Выход\r\n"),
         )?;
         stdout().flush()?;
 
@@ -95,7 +85,7 @@ impl TodoTUI {
                         self.todolist.select_next();
                     }
                     KeyCode::Enter => {
-                        if let Some((task, _depth)) = self.todolist.get_selected_task() {
+                        if let Some((_task, _depth)) = self.todolist.get_selected_task() {
                             self.show_task_details_menu()?;
                         }
                     }
@@ -135,9 +125,9 @@ impl TodoTUI {
             let (task, _) = self.todolist.get_selected_task().unwrap();
             self.show_task_details(&task)?;
             
-            println!("\n\n1. Добавить подзадачу");
-            println!("2. Изменить данные");
-            println!("3. Удалить задачу");
+            println!("{}", "\n\n1. Добавить подзадачу".green());
+            println!("{}", "2. Изменить данные".yellow());
+            println!("{}", "3. Удалить задачу".red());
             println!("4. Назад");
             print!("Ваш выбор: ");
             stdout().flush()?;
@@ -150,8 +140,15 @@ impl TodoTUI {
                 2 => {
                     self.change_task_data(&task)?;
                     execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
-                    println!("Данные обновлены!\n");
-                }
+                    println!("{}", "Данные обновлены!\n".green());
+                },
+                3 => {
+                    execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
+                    if self._delete_selected_task()? {
+                        break
+                    }
+                    execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
+                },
                 _ => break
             }
         }
@@ -161,11 +158,11 @@ impl TodoTUI {
 
     fn add_subtask(&mut self, task_id: u32) -> Result<(), Box<dyn Error>> {
         execute!(stdout(), Clear(ClearType::All),MoveTo(0, 0),EnableBlinking,Show,)?;
-        println!("\n➕ Добавление подзадачи...");
+        println!("{}", "\n➕ Добавление подзадачи...".green());
         let result = self._add_task(Some(task_id))?;
         execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
         if result {
-            println!("Подзадача добавлена!\n");
+            println!("{}", "Подзадача добавлена!\n".green());
         }
 
         Ok(())
@@ -256,7 +253,7 @@ impl TodoTUI {
             EnableBlinking,
             Show,
         )?;
-        println!("\n➕ Добавление задачи...");
+        println!("{}", "\n➕ Добавление задачи...".green());
         self._add_task(parent_id)?;
         enable_raw_mode()?;
         Ok(())
@@ -266,7 +263,7 @@ impl TodoTUI {
 
     // ===== Deleting task methods ===== // 
     
-    fn delete_selected_task(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn delete_selected_task(&mut self) -> Result<bool, Box<dyn std::error::Error>> { 
         execute!(stdout(), 
             Clear(ClearType::All),
             MoveTo(0, 0),
@@ -274,11 +271,18 @@ impl TodoTUI {
             Show,
         )?;
         disable_raw_mode()?;
+        let result = self._delete_selected_task()?;
+        enable_raw_mode()?;
+
+        Ok(result)
+    }
+
+    fn _delete_selected_task(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         if let Some((task, _)) = self.todolist.get_selected_task() {
             loop {
-                println!("\n🗑️ Удаление задачи: {}", task.name);
+                println!("\n🗑️ Удаление задачи: {}", task.name.red());
                 println!("Вы уверены, что хотите удалить выбранную задачу (так же удалятся все ее подзадачи)?");
-                println!("1. Да");
+                println!("{}", "1. Да".red());
                 println!("2. Нет");
                 print!("Ваш выбор: ");
                 stdout().flush()?;
@@ -289,9 +293,9 @@ impl TodoTUI {
                     1 => {
                         self.todolist.delete_task(task.id)?;
                         self.todolist.refresh_data()?;
-                        break;
+                        return Ok(true)
                     },
-                    2 => break,
+                    2 => return Ok(false),
                     _ => {
                         println!("Выберите одно из предложенного\n");
                         execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
@@ -299,9 +303,8 @@ impl TodoTUI {
     
                 }
             }
-            enable_raw_mode()?;
         }
-        Ok(())
+        Ok(false)
     }
 
     // ===== Deleting task methods ===== // 

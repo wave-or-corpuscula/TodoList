@@ -176,6 +176,12 @@ impl TodoList {
     }
     
     pub fn print_tasks(&self) -> Result<(), Box<dyn Error>> {
+        if self.tasks.is_empty() {
+            queue!(stdout(), 
+                Print("Нет задач\r\n".red()),
+                Print("Чтобы добавить задачу нажмите клавишу [a]\r\n\r\n"),
+            )?;
+        }
         for task in &self.tasks {
             self._print_task_tree(task, 0)?;
         }
