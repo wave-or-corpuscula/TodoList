@@ -1,333 +1,241 @@
-use std::{error::Error, io::{BufRead, Write, stdin, stdout}};
+use std::error::Error;
 
 use crossterm::{
-    cursor::{Hide, MoveTo, Show, EnableBlinking}, event::{Event, KeyCode, read}, execute, queue, style::Print, terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode}
+    event::KeyCode, queue, style::Print
 };
 use colored::Colorize;
 
-use crate::task::*;
-use crate::todolist::TodoList;
+use crate::{config::Config, database::DB, services::{navigation_service::NavigationService, task_service::TaskService}, task::*, ui::{input::InputHandler, task_renderer::TaskRenderer, terminal::TerminalRenderer}};
 
 
 pub struct TodoTUI {
-    todolist: TodoList,
+    task_service: TaskService,
+    navigation: NavigationService,
+    renderer: TerminalRenderer,
+    selected_id: i32,
     running: bool,
 }
 
 impl TodoTUI {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let todolist = TodoList::new()?;
+        let task_service = TaskService::new(DB::new(&Config::build()?)?);
+        let tasks = task_service.load_hierarchy()?;
+        let navigation = NavigationService::new(&tasks);
+        let renderer = TerminalRenderer::new();
+        
         Ok(Self {
-            todolist: todolist,
+            task_service,
+            selected_id: navigation.get_first_id().unwrap_or(-1),
+            navigation,
+            renderer,
             running: true,
         })
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        enable_raw_mode()?;
-        execute!(std::io::stdout(), Hide, Clear(ClearType::All))?;
+        self.renderer.enter_raw_mode()?;
         
         while self.running {
-            self.render()?;
-            self.handle_events()?;
+            self.refresh_navigation()?;
+            self.render_main_view()?;
+            self.handle_main_events()?;
         }
         
-        disable_raw_mode()?;
-        execute!(std::io::stdout(), Show)?;
+        self.renderer.exit_raw_mode()?;
         Ok(())
     }
 
-    // ===== Tasks List methods ===== // 
+    fn refresh_navigation(&mut self) -> Result<(), Box<dyn Error>> {
+        let tasks = self.task_service.load_hierarchy()?;
+        self.navigation = NavigationService::new(&tasks);
+        Ok(())
+    }
 
-    fn render(&self) -> Result<(), Box<dyn std::error::Error>> {
-        execute!(stdout(), 
-            Clear(ClearType::All),
-            MoveTo(0, 0),
-            Hide
-        )?;
-        queue!(stdout(),
-            Print("Ваши задачи:\r\n\r\n".cyan()),
-        )?;
+    fn render_main_view(&mut self) -> Result<(), Box<dyn Error>> {
+        self.renderer.clear_screen()?;
         
-        // Список задач с выделением
-        self.todolist.print_tasks()?;
-
-        queue!(stdout(),
-            Print("\r\n"),
-            Print("Управление:\r\n"),
-            Print("↑↓    Навигация\r\n"),
-            Print("Enter Детали задачи\r\n"), 
-            Print("a     Добавить задачу\r\n".green()),
-            Print("d     Удалить задачу\r\n".red()),
-            Print("q     Выход\r\n"),
-        )?;
-        stdout().flush()?;
-
+        queue!(std::io::stdout(), Print("Your tasks:\r\n\r\n".cyan()))?;
+        
+        let tasks = self.task_service.load_hierarchy()?;
+        TaskRenderer::render_task_list(&tasks, self.selected_id)?;
+        TaskRenderer::render_main_menu()?;
+        
+        self.renderer.flush()?;
         Ok(())
     }
 
-    fn toggle_completed(&mut self) -> Result<(), Box<dyn Error>> {
-        self.todolist.toggle_current_completed()?;
-        self.todolist.refresh_data()?;
-        Ok(())
-    }
-
-    // ===== Tasks List methods ===== // 
-
-    fn handle_events(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        match read()? {
-            Event::Key(event) => {
-                match event.code {
-                    KeyCode::Up => {
-                        self.todolist.select_previous();
-                    }
-                    KeyCode::Down => {
-                        self.todolist.select_next();
-                    }
-                    KeyCode::Enter => {
-                        if let Some((_task, _depth)) = self.todolist.get_selected_task() {
-                            self.show_task_details_menu()?;
-                        }
-                    }
-                    KeyCode::Tab => {
-                        self.toggle_completed()?;
-                    }
-                    KeyCode::Char('a') => {
-                        self.add_task(None)?;
-                    }
-                    KeyCode::Char('d') => {
-                        self.delete_selected_task()?;
-                    }
-                    KeyCode::Char('q') => {
-                        self.running = false;
-                    }
-                    _ => {}
-                }
-            }
+    fn handle_main_events(&mut self) -> Result<(), Box<dyn Error>> {
+        match InputHandler::read_key()? {
+            KeyCode::Up => self.navigate_up()?,
+            KeyCode::Down => self.navigate_down()?,
+            KeyCode::Enter => self.show_task_details()?,
+            KeyCode::Tab => self.toggle_task_completion()?,
+            KeyCode::Char('a') => self.add_task(None)?,
+            KeyCode::Char('d') => self.delete_selected_task()?,
+            KeyCode::Char('q') => self.running = false,
             _ => {}
         }
         Ok(())
     }
 
-    // ===== Show Details methods ===== // 
+    fn navigate_up(&mut self) -> Result<(), Box<dyn Error>> {
+        if self.selected_id == -1 {
+            return Ok(()); // No tasks for navigation
+        }
+        if let Some(new_id) = self.navigation.get_previous_id(self.selected_id) {
+            self.selected_id = new_id;
+        }
+        Ok(())
+    }
 
-    fn show_task_details_menu(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        disable_raw_mode()?;
-        execute!(stdout(), 
-            Clear(ClearType::All),
-            MoveTo(0, 0),
-            EnableBlinking,
-            Show
-        )?;
+    fn navigate_down(&mut self) -> Result<(), Box<dyn Error>> {
+        if self.selected_id == -1 {
+            return Ok(()); // No tasks for navigation
+        }
+        if let Some(new_id) = self.navigation.get_next_id(self.selected_id) {
+            self.selected_id = new_id;
+        }
+        Ok(())
+    }
 
+    fn toggle_task_completion(&mut self) -> Result<(), Box<dyn Error>> {
+        if self.selected_id == -1 {
+            return Ok(()); // No task selected
+        }
+        self.task_service.toggle_task_completion(self.selected_id as u32)?;
+        Ok(())
+    }
+
+    fn show_task_details(&mut self) -> Result<(), Box<dyn Error>> {
+        if self.selected_id == -1 {
+            return Ok(()); // No task selected
+        }
+        self.renderer.enter_interactive_mode()?;
+        
         loop {
+            let task = match self.navigation.get_task_with_depth(self.selected_id) {
+                Some((t, _)) => t,
+                None => return Ok(())
+            };
+            let children = self.task_service.get_children(task.id)?;
+            TaskRenderer::render_task_details(&task, &children)?;
+            TaskRenderer::render_task_detail_menu()?;
             
-            let (task, _) = self.todolist.get_selected_task().unwrap();
-            self.show_task_details(&task)?;
+            let choice = InputHandler::read_choice("Your choice: ")?;
             
-            println!("{}", "\n\n1. Добавить подзадачу".green());
-            println!("{}", "2. Изменить данные".yellow());
-            println!("{}", "3. Удалить задачу".red());
-            println!("4. Назад");
-            print!("Ваш выбор: ");
-            stdout().flush()?;
-            
-            let input: u32 = console_read()?.parse().unwrap_or(0);
-            match input {
+            match choice {
                 1 => {
+                    self.renderer.clear_screen()?;
                     self.add_subtask(task.id)?;
+                    self.renderer.clear_screen()?;
                 },
                 2 => {
-                    self.change_task_data(&task)?;
-                    execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
-                    println!("{}", "Данные обновлены!\n".green());
+                    self.renderer.clear_screen()?;
+                    let updated = self.change_task_data(&task)?;
+                    self.renderer.clear_screen()?;
+                    if updated {
+                        self.refresh_navigation()?;
+                    }
+                    println!("{}", "Data updated!\n".green());
                 },
                 3 => {
-                    execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
-                    if self._delete_selected_task()? {
-                        break
+                    self.renderer.clear_screen()?;
+                    if InputHandler::confirm_deletion(&task.name)? {
+                        self.task_service.delete_task(task.id)?;
+                        self.selected_id = self.navigation.get_first_id().unwrap_or(-1);
+                        break;
                     }
-                    execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
                 },
                 _ => break
             }
         }
-        enable_raw_mode()?;
+            
+            self.renderer.enter_raw_mode()?;
         Ok(())
-    }
-
-    fn add_subtask(&mut self, task_id: u32) -> Result<(), Box<dyn Error>> {
-        execute!(stdout(), Clear(ClearType::All),MoveTo(0, 0),EnableBlinking,Show,)?;
-        println!("{}", "\n➕ Добавление подзадачи...".green());
-        let result = self._add_task(Some(task_id))?;
-        execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
-        if result {
-            println!("{}", "Подзадача добавлена!\n".green());
-        }
-
-        Ok(())
-    }
-
-    fn change_task_data(&mut self, task: &Task) -> Result<(), Box<dyn Error>> {
-        execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
-        println!("Введите новые данные для задачи:");
-        let (name, desc) = self.enter_task_data()?;
-        let updated = self.todolist.update_task(
-            task.id, 
-            name, 
-            None,
-            None, 
-            desc
-        )?;
-
-        if updated {
-            self.todolist.refresh_data()?;
-        }
-
-        Ok(())
-
-    }
-
-    fn show_task_details(&self, task: &Task) -> Result<(), Box<dyn Error>> {
-        println!("📋 Детали задачи");
-        println!("{}", "─".repeat(30));
-        println!("📝 Название: {}", task.name);
-        println!("✅ Статус: {}", if task.completed { "Выполнена" } else { "В работе" });
-        println!("📅 Создана: {}", task.creation_date.format("%Y-%m-%d %H:%M"));
-        
-        if let Some(desc) = &task.description {
-            println!("📄 Описание: {}", desc);
-        }
-        
-        // Показываем дочерние задачи
-        let children = self.todolist.get_selected_children()?;
-        if !children.is_empty() {
-            println!("\n🔗 Подзадачи:\r\n");
-            for (i, child) in children.iter().enumerate() {
-                println!("  {}. {} {}", i + 1, 
-                                        if child.completed { "✓" } else { "○" }, 
-                                        child.name);
-            }
-        }
-        Ok(())
-    }
-
-    // ===== Show Details methods ===== //
-
-    // ===== Adding task methods ===== // 
-
-    fn enter_task_data(&self) -> Result<(Option<String>, Option<String>), Box<dyn Error>> {
-        print!("Введите название задачи [Enter для отмены]: ");
-        stdout().flush()?;
-
-        let name = console_read()?;
-        if name.is_empty() {
-            return Ok((None, None))
-        }
-
-        println!("Введите описание задачи [Enter чтобы пропустить]: ");
-        let desc = console_read()?;
-        Ok((Some(name), if desc.is_empty() { None } else { Some(desc) }))
-    }
-
-    fn _add_task(&mut self, parent_id: Option<u32>) -> Result<bool, Box<dyn std::error::Error>> {
-        let (name, desc) = self.enter_task_data()?;
-        if name.is_none() {
-            return Ok(false)
-        }
-        self.todolist.create_task(
-            name.unwrap(), 
-            parent_id, 
-            desc
-        )?;
-
-        self.todolist.refresh_data()?;
-        Ok(true)
     }
 
     fn add_task(&mut self, parent_id: Option<u32>) -> Result<(), Box<dyn Error>> {
-        disable_raw_mode()?;
-        execute!(stdout(), 
-            Clear(ClearType::All),
-            MoveTo(0, 0),
-            EnableBlinking,
-            Show,
-        )?;
-        println!("{}", "\n➕ Добавление задачи...".green());
-        self._add_task(parent_id)?;
-        enable_raw_mode()?;
+        self.renderer.enter_interactive_mode()?;
+        let insert_id = self._add_task(parent_id)?;
+        if self.navigation.is_empty() {
+            self.selected_id = insert_id;
+        }
+        self.renderer.enter_raw_mode()?;
         Ok(())
     }
 
-    // ===== Adding task methods ===== // 
-
-    // ===== Deleting task methods ===== // 
-    
-    fn delete_selected_task(&mut self) -> Result<bool, Box<dyn std::error::Error>> { 
-        execute!(stdout(), 
-            Clear(ClearType::All),
-            MoveTo(0, 0),
-            EnableBlinking,
-            Show,
-        )?;
-        disable_raw_mode()?;
-        let result = self._delete_selected_task()?;
-        enable_raw_mode()?;
-
-        Ok(result)
-    }
-
-    fn _delete_selected_task(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
-        if let Some((task, _)) = self.todolist.get_selected_task() {
-            loop {
-                println!("\n🗑️ Удаление задачи: {}", task.name.red());
-                println!("Вы уверены, что хотите удалить выбранную задачу (так же удалятся все ее подзадачи)?");
-                println!("{}", "1. Да".red());
-                println!("2. Нет");
-                print!("Ваш выбор: ");
-                stdout().flush()?;
-    
-                let input: i32 = console_read()?.parse().unwrap_or(0) ;
-    
-                match input {
-                    1 => {
-                        self.todolist.delete_task(task.id)?;
-                        self.todolist.refresh_data()?;
-                        return Ok(true)
-                    },
-                    2 => return Ok(false),
-                    _ => {
-                        println!("Выберите одно из предложенного\n");
-                        execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
-                    }
-    
-                }
-            }
-        }
-        Ok(false)
-    }
-
-    // ===== Deleting task methods ===== // 
-
-}
-
-fn console_read() -> Result<String, Box<dyn Error>> {
-    Ok(stdin().lock().lines().next().unwrap()?)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn change_task_data() -> Result<(), Box<dyn Error>> {
-        let mut tui = TodoTUI::new()?;
-        tui.todolist.select_previous();
-        tui.todolist.select_previous();
+    fn _add_task(&mut self, parent_id: Option<u32>) -> Result<i32, Box<dyn Error>> {
+        println!("{}", "\n➕ Adding task...".green());
         
-        let (task, _) = tui.todolist.get_selected_task().unwrap();
-        tui.change_task_data(&task)?;
+        let name = InputHandler::read_text("Enter task name [Enter to cancel]: ")?;
+        if name.is_empty() {
+            return Ok(-1);
+        }
+        
+        let desc = InputHandler::read_text("Enter task description [Enter to skip]: ")?;
+        let description = if desc.is_empty() { None } else { Some(desc) };
+        
+        let insert_id = self.task_service.create_task(name, parent_id, description)?;
+        
+        self.renderer.clear_screen()?;
+        println!("{}", "Task added!\n".green());
+        
+        // Wait for Enter to continue
+        InputHandler::read_text("Press Enter to continue...")?;
+        Ok(insert_id)
+    }
 
+    fn add_subtask(&mut self, task_id: u32) -> Result<(), Box<dyn Error>> {
+        self._add_task(Some(task_id))?;
+        Ok(())
+    }
+
+    fn change_task_data(&mut self, task: &Task) -> Result<bool, Box<dyn Error>> {
+        println!("Enter new data for task:");
+
+        let name = InputHandler::read_text(&format!("Name [{}]: ", task.name))?;
+        let description = InputHandler::read_text("Description [Enter to skip]: ")?;
+        
+        let name_final = if name.is_empty() { None } else { Some(name) };
+        let desc_final = if description.is_empty() { None } else { Some(description) };
+        
+        let updated = self.task_service.update_task(task.id, name_final, desc_final)?;
+
+        InputHandler::read_text("Press Enter to continue...")?;
+
+        Ok(updated)
+    }
+
+    fn delete_selected_task(&mut self) -> Result<(), Box<dyn Error>> {
+
+        if self.selected_id == -1 {
+            self.renderer.enter_interactive_mode()?;
+            self.renderer.clear_screen()?;
+            println!("{}", "No task selected for deletion\n".yellow());
+            InputHandler::read_text("Press Enter to continue...")?;
+            self.renderer.enter_raw_mode()?;
+            return Ok(());
+        }
+        if let Some((task, _)) = self.navigation.get_task_with_depth(self.selected_id) {
+            self.renderer.enter_interactive_mode()?;
+            
+            if InputHandler::confirm_deletion(&task.name)? {
+                self.task_service.delete_task(task.id)?;
+                self.refresh_navigation()?;
+                self.selected_id = self.navigation.get_first_id().unwrap_or(-1);
+                
+                self.renderer.clear_screen()?;
+                println!("{}", "Task deleted!\n".red());
+            } else {
+                self.renderer.clear_screen()?;
+                println!("{}", "Deletion cancelled\n");
+            }
+
+            // Wait for Enter to continue
+            InputHandler::read_text("Press Enter to continue...")?;
+            
+            self.renderer.enter_raw_mode()?;
+        }
         Ok(())
     }
 }

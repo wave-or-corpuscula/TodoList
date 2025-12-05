@@ -9,8 +9,3 @@ rusqlite = { version = "0.37.0", features = ["bundled"] }
 dotenv = "0.15"
 colored = "3.0.0"
 crossterm = { version = "0.29.0", features = ["event-stream"]}
-
-
-[[bin]]
-name = "migrations"
-path = "./src/bin/migration.rs"

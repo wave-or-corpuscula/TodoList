@@ -161,13 +161,13 @@ impl TodoList {
             name
         };
         
-        // Отступ в зависимости от глубины
+        // Indent based on depth
         let indent = "  ".repeat(depth as usize);
         queue!(stdout(), 
             Print(format!("{} {} {}\r\n", indent, status_char, name_colored))
         )?;
 
-        // Рекурсивно выводим подзадачи
+        // Recursively print subtasks
         for subtask in &task.subtasks {
             self._print_task_tree(subtask, depth + 1)?;
         }
@@ -178,8 +178,8 @@ impl TodoList {
     pub fn print_tasks(&self) -> Result<(), Box<dyn Error>> {
         if self.tasks.is_empty() {
             queue!(stdout(), 
-                Print("Нет задач\r\n".red()),
-                Print("Чтобы добавить задачу нажмите клавишу [a]\r\n\r\n"),
+                Print("No tasks\r\n".red()),
+                Print("Press [a] to add a task\r\n\r\n"),
             )?;
         }
         for task in &self.tasks {
@@ -215,7 +215,7 @@ impl TodoList {
         name: String, 
         parent_id: Option<u32>,
         description: Option<String>
-     ) -> Result<(), Box<dyn Error>> {
+     ) -> Result<i32, Box<dyn Error>> {
         self.db.create_task(&CreateTask { parent_id, name, description })
     }
 

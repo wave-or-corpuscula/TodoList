@@ -1,27 +1,27 @@
-# 📋 TodoList - Консольное приложение для управления задачами
+# 📋 TodoList - Terminal Task Management Application
 
 ![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)
 ![SQLite](https://img.shields.io/badge/sqlite-%2307405e.svg?style=for-the-badge&logo=sqlite&logoColor=white)
 ![Terminal](https://img.shields.io/badge/terminal-%23121212.svg?style=for-the-badge&logo=linux&logoColor=white)
 
-Элегантное консольное приложение для управления задачами с иерархической структурой подзадач. Написано на Rust с использованием SQLite для хранения данных.
+An elegant terminal application for managing hierarchical tasks with unlimited subtask nesting. Written in Rust with SQLite for data persistence.
 
-## ✨ Возможности
+## ✨ Features
 
-- 🌳 **Иерархические задачи** - создавайте подзадачи любой глубины вложенности
-- ⌨️ **Интерфейс навигации** - перемещайтесь по задачам с помощью стрелок ↑↓
-- ⚡ **Быстрые действия** - выполненные/невыполненные задачи, добавление, редактирование, удаление
-- 💾 **Надежное хранение** - SQLite база данных с каскадным удалением подзадач
-- 🎨 **Цветной интерфейс** - визуальная индикация статуса задач и выделение выбранной
-- 🔄 **Живые обновления** - мгновенное переключение статуса задач (Tab)
+- 🌳 **Hierarchical Tasks** - Create subtasks with unlimited nesting depth
+- ⌨️ **Navigation Interface** - Navigate through tasks with arrow keys ↑↓
+- ⚡ **Quick Actions** - Toggle completion, add, edit, delete tasks instantly
+- 💾 **Reliable Storage** - SQLite database with cascade deletion for subtasks
+- 🎨 **Colored Interface** - Visual status indication and task highlighting
+- 🔄 **Live Updates** - Instant task completion toggling (Tab)
 
-## 🚀 Быстрый старт
+## 🚀 Quick Start
 
-### Установка зависимостей
+### Install Dependencies
 
-Убедитесь, что у вас установлен [Rust](https://rustup.rs/) и [SQLite](https://sqlite.org/download.html).
+Make sure you have [Rust](https://rustup.rs/) and [SQLite](https://sqlite.org/download.html) installed.
 
-### Клонирование и сборка
+### Clone and Build
 
 ```bash
 git clone <repository-url>
@@ -29,175 +29,188 @@ cd todolist
 cargo build --release
 ```
 
-### Настройка базы данных
+### Database Setup
 
-1. Скопируйте `.env.example` в `.env`:
+1. Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
 
-2. Заполните переменные окружения в `.env`:
+2. Fill environment variables in `.env`:
 ```env
 DB_PATH=./data/todolist.sqlite3
 ```
 
-3. Запустите миграции для создания таблиц и заполнения тестовыми данными:
+3. Run migrations to create tables and populate with test data:
 ```bash
 cargo run --bin migration
 ```
 
-### Запуск приложения
+### Run the Application
 
 ```bash
 cargo run --bin todolist
 ```
 
-## 🎮 Управление
+## 🎮 Controls
 
-### Основной экран
-- **↑↓** - Навигация по списку задач
-- **Enter** - Открыть детали выбранной задачи
-- **Tab** - Переключить статус выполнения задачи
-- **a** - Добавить новую задачу
-- **d** - Удалить выбранную задачу
-- **q** - Выход
+### Main Screen
+- **↑↓** - Navigate through task list
+- **Enter** - Open selected task details
+- **Tab** - Toggle task completion status
+- **a** - Add new task
+- **d** - Delete selected task
+- **q** - Quit
 
-### Детали задачи
-- **1** - Добавить подзадачу
-- **2** - Изменить данные задачи
-- **3** - Удалить задачу (касτадно удаляются все подзадачи)
-- **4** - Вернуться в основной список
+### Task Details
+- **1** - Add subtask
+- **2** - Edit task data
+- **3** - Delete task (cascades to all subtasks)
+- **4** - Return to main list
 
-## 📁 Структура проекта
+## 📁 Project Structure
 
 ```
 src/
-├── lib.rs                 # Переэкспорт модулей
-├── main.rs               # Точка входа приложения
-├── task.rs               # Модели данных (Task, TaskWithKids)
-├── todolist.rs           # Логика управления задачами и навигация
-├── todotui.rs            # Консольный интерфейс пользователя
-├── database.rs           # Работа с базой данных SQLite
-├── config.rs             # Конфигурация приложения
-└── bin/
-    ├── todolist.rs       # Основное приложение
-    └── migration.rs      # Миграции базы данных
+├── lib.rs                 # Module re-exports
+├── main.rs               # Application entry point
+├── task.rs               # Data models (Task, TaskWithKids)
+├── todotui.rs            # Terminal user interface controller
+├── todolist.rs           # Legacy task management logic
+├── database.rs           # SQLite database operations
+├── config.rs             # Application configuration
+├── ui/                   # User interface components
+│   ├── mod.rs
+│   ├── input.rs          # Input handling utilities
+│   ├── task_renderer.rs  # Task display formatting
+│   └── terminal.rs       # Terminal control utilities
+└── services/             # Business logic services
+    ├── mod.rs
+    ├── task_service.rs   # Task management operations
+    └── navigation_service.rs # Navigation and traversal logic
+
 ```
 
-## 🛠️ Технологический стек
+## 🛠️ Technology Stack
 
-- **Язык:** Rust 2021 Edition
-- **База данных:** SQLite с `rusqlite`
-- **UI фреймворк:** `crossterm` для терминального интерфейса
-- **Конфигурация:** `dotenv` для переменных окружения
-- **Цвета:** `colored` для визуального оформления
+- **Language:** Rust 2024 Edition
+- **Database:** SQLite with `rusqlite`
+- **UI Framework:** `crossterm` for terminal interface
+- **Configuration:** `dotenv` for environment variables
+- **Colors:** `colored` for visual formatting
+- **Date/Time:** `chrono` for timestamp management
 
-## 📊 Архитектура
+## 📊 Architecture
 
-Приложение построено по принципу разделения ответственности:
+The application follows the separation of concerns principle:
 
-1. **Data Layer** (`database.rs`) - Абстракция над SQLite
-2. **Business Logic** (`todolist.rs`) - Управление иерархией задач
-3. **Presentation Layer** (`todotui.rs`) - Интерфейс пользователя
-4. **Models** (`task.rs`) - Структуры данных
+1. **Data Layer** (`database.rs`) - SQLite abstraction
+2. **Business Logic** (`services/`) - Task management and navigation
+3. **Presentation Layer** (`todotui.rs`, `ui/`) - User interface
+4. **Models** (`task.rs`) - Data structures
 
-## 🧪 Тестирование
+### Service Layer Architecture
+
+- **TaskService**: Handles all task CRUD operations and database interactions
+- **NavigationService**: Manages task traversal and selection logic
+- **UI Components**: Separated concerns for input handling, rendering, and terminal control
+
+## 🧪 Testing
 
 ```bash
-# Запустить все тесты
+# Run all tests
 cargo test
 
-# Запустить тесты с выводом
+# Run tests with output
 cargo test -- --nocapture
 
-# Запустить конкретный тест
+# Run specific test
 cargo test print_tasks
 ```
 
-## 📋 Пример использования
+## 📋 Usage Example
 
 ```
-🎯 TodoList - Управление задачами
-══════════════════════════════════════════════════
+Your tasks:
 
-○ Изучить Rust
-  ○ Прочитать The Rust Book
-  ✓ Сделать упражнения
-  ○ Написать простую программу
-✓ Создать проект TodoList
-  ✓ Настроить проект
-    ✓ Установить зависимости
-  ○ Реализовать CRUD операции
-  ✓ Добавить миграции
-○ Написать документацию
+○ Learn Rust
+  ○ Read The Rust Book
+  ✓ Do exercises
+  ○ Write simple program
+✓ Create TodoList project
+  ✓ Set up project
+    ✓ Install dependencies
+  ○ Implement CRUD operations
+  ✓ Add migrations
+○ Write documentation
 
-Управление:
-↑↓    Навигация
-Enter Детали задачи
-a     Добавить задачу
-d     Удалить задачу
-q     Выход
+Controls:
+↑↓    Navigate
+Enter Task details
+a     Add task
+d     Delete task
+q     Quit
 ```
 
-## 🔧 Разработка
+## 🔧 Development
 
-### Добавление новых команд
+### Adding New Commands
 
-Для добавления новой команды в интерфейсе:
+To add a new command to the interface:
 
-1. Добавьте обработчик в `handle_events()` в `todotui.rs`
-2. Реализуйте соответствующий метод
-3. Добавьте информацию о команде в справку
+1. Add handler in `handle_events()` in `todotui.rs`
+2. Implement the corresponding method
+3. Update command documentation
 
-### Расширение моделей данных
+### Extending Data Models
 
-Для добавления новых полей в модель `Task`:
+To add new fields to the `Task` model:
 
-1. Обновите структуру в `task.rs`
-2. Добавьте миграцию в `migration.rs`
-3. Обновите SQL запросы в `database.rs`
-4. Обновите UI для отображения новых полей
+1. Update the structure in `task.rs`
+2. Add migration in `migration.rs`
+3. Update SQL queries in `database.rs`
+4. Update UI to display new fields
 
-## 🐛 Устранение неполадок
+## 🐛 Troubleshooting
 
-### Распространенные проблемы
+### Common Issues
 
-**Ошибка базы данных:**
+**Database Error:**
 ```bash
-# Убедитесь, что SQLite установлен
+# Make sure SQLite is installed
 sqlite3 --version
 
-# Проверьте права доступа к директории данных
+# Check directory permissions
 mkdir -p data
 chmod 755 data
 ```
 
-**Проблемы с отображением в терминале:**
+**Terminal Display Issues:**
 ```bash
-# Проверьте поддержку UTF-8
+# Check UTF-8 support
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 ```
 
-## 🤝 Вклад в проект
+## 🤝 Contributing
 
-1. Fork проект
-2. Создайте ветку (`git checkout -b feature/amazing-feature`)
-3. Внесите изменения
-4. Сделайте коммит (`git commit -m 'Add amazing feature'`)
-5. Отправьте в репозиторий (`git push origin feature/amazing-feature`)
-6. Откройте Pull Request
+1. Fork the project
+2. Create a branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Commit (`git commit -m 'Add amazing feature'`)
+5. Push to repository (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
 
-## 📄 Лицензия
+## 📄 License
 
-Этот проект распространяется под лицензией MIT. Подробности в файле [LICENSE](LICENSE).
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
-## 🙏 Благодарности
+## 🙏 Acknowledgments
 
-- Команде Rust за прекрасный язык программирования
-- Создателям библиотеки `crossterm` за удобную работу с терминалом
-- Сообществу SQLite за надежную встраиваемую базу данных
+- The Rust team for the wonderful programming language
+- `crossterm` creators for excellent terminal utilities
+- SQLite community for reliable embedded database
 
 ---
 
-**Сделано с ❤️ на Rust**
+**Made with ❤️ in Rust**

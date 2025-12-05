@@ -87,7 +87,7 @@ impl DB {
         
     }
 
-    pub fn create_task(&self, task: &CreateTask) -> Result<(), Box<dyn Error>>{
+    pub fn create_task(&self, task: &CreateTask) -> Result<i32, Box<dyn Error>>{
         self.connection.execute(
             "INSERT INTO Task (parent_id, name, description) VALUES (?1, ?2, ?3)",
         (
@@ -96,7 +96,9 @@ impl DB {
             &task.description
         ))?;
 
-        Ok(())
+        let insert_id = self.connection.last_insert_rowid() as i32;
+
+        Ok(insert_id)
     }
 
     pub fn update_task(&self, task: &UpdateTask) -> Result<(), Box<dyn Error>> {
